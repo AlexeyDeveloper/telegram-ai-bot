@@ -39,7 +39,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         if response.status_code == 200:
-            message = response.json().get('outputs', [{}])[0].get('outputs', [{}])[0].get('results', {}).get('message', '')
+            data = response.json()
+            message = data.get('outputs', [{}])[0].get('outputs', [{}])[0].get('results', {}).get('message', '')
             text = message if isinstance(message, str) else message.get('text', 'Не удалось обработать ответ')
             await update.message.reply_text(text)
         else:
@@ -49,29 +50,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка: {e}")
         await update.message.reply_text("Произошла ошибка")
 
-async def setup_webhook(app: Application):
-    await app.bot.delete_webhook(drop_pending_updates=True)
-    await app.bot.set_webhook(
-        url=WEBHOOK_URL,
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True
-    )
-    logger.info(f"Webhook установлен на {WEBHOOK_URL}")
-
-async def main():
+def main():
+    """Основная функция для запуска на Render"""
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    await setup_webhook(app)
-    
-    await app.run_webhook(
+    # Удаляем старый webhook и устанавливаем новый
+    app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         webhook_url=WEBHOOK_URL,
-        drop_pending_updates=True
+        drop_pending_updates=True,
+        secret_token=None
     )
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Для Render используем просто main() без asyncio.run
+    main()
