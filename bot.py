@@ -17,7 +17,7 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '7547401041:AAFa6kFA-nT8PpAuDwjqFAz
 LANGFLOW_API_KEY = os.getenv('LANGFLOW_API_KEY', 'sk-ric-EXqYeklFtuOzW7TqJdXB39oOgzBLys92mpUwRcg')
 LANGFLOW_ENDPOINT = "https://agents.kolbplus.de/api/v1/run/30d8502d-e8af-4a48-a095-8c8e59c20d6e?stream=false"
 WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://telegram-ai-bot-peh1.onrender.com/webhook')
-PORT = int(os.getenv('PORT', 5000))
+PORT = int(os.getenv('PORT', 10000))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я бот с AI-моделью. Задайте вопрос.")
