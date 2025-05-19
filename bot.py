@@ -10,7 +10,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Конфигурация (лучше вынести в переменные окружения)
+# Конфигурация
 TELEGRAM_TOKEN = "7547401041:AAFa6kFA-nT8PpAuDwjqFAzIOYzrxmPXxgY"
 LANGFLOW_API_KEY = "sk-ric-EXqYeklFtuOzW7TqJdXB39oOgzBLys92mpUwRcg"
 LANGFLOW_ENDPOINT = "https://agents.kolbplus.de/api/v1/run/30d8502d-e8af-4a48-a095-8c8e59c20d6e?stream=false"
@@ -22,6 +22,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Привет, {user.first_name}! Я тестовый бот с AI-моделью.\n"
         "Просто напиши мне любой вопрос, и я постараюсь ответить!"
     )
+
+def extract_message_from_response(response_data):
+    """Извлекает текстовое сообщение из сложного JSON-ответа"""
+    try:
+        # Основной путь к сообщению в вашем JSON
+        message = response_data['outputs'][0]['outputs'][0]['results']['message']['text']
+        return message
+    except (KeyError, IndexError, TypeError) as e:
+        logger.error(f"Ошибка при разборе ответа API: {str(e)}")
+        return None
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений"""
@@ -41,20 +51,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "output_type": "chat",
                 "input_type": "chat"
             },
-            timeout=10  # Таймаут 10 секунд
+            timeout=10
         )
         
         if response.status_code == 200:
-            ai_response = response.json()
-            # Проверяем, что ответ содержит текст
-            if isinstance(ai_response, str):
-                reply_text = ai_response
-            elif isinstance(ai_response, dict) and "text" in ai_response:
-                reply_text = ai_response["text"]
-            else:
-                reply_text = str(ai_response)
+            response_data = response.json()
+            ai_message = extract_message_from_response(response_data)
             
-            await update.message.reply_text(reply_text)
+            if ai_message:
+                await update.message.reply_text(ai_message)
+            else:
+                logger.error("Не удалось извлечь сообщение из ответа API")
+                await update.message.reply_text("Получен неожиданный формат ответа от AI.")
         else:
             error_msg = f"Ошибка API (код {response.status_code}): {response.text}"
             logger.error(error_msg)
