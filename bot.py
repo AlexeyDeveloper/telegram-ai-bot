@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = "7547401041:AAFa6kFA-nT8PpAuDwjqFAzIOYzrxmPXxgY"
 LANGFLOW_API_KEY = "sk-ric-EXqYeklFtuOzW7TqJdXB39oOgzBLys92mpUwRcg"
 LANGFLOW_ENDPOINT = "https://agents.kolbplus.de/api/v1/run/30d8502d-e8af-4a48-a095-8c8e59c20d6e?stream=false"
-WEBHOOK_URL = "https://ваш-домен.ру/webhook"  # Обязательно HTTPS!
+WEBHOOK_URL = "https://telegram-ai-bot-peh1.onrender.com/webhook"  # Обязательно HTTPS!
 WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = int(os.environ.get('PORT', 5000))
+WEBAPP_PORT = int(5000)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
