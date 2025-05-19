@@ -16,41 +16,27 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = "7547401041:AAFa6kFA-nT8PpAuDwjqFAzIOYzrxmPXxgY"
 LANGFLOW_API_KEY = "sk-ric-EXqYeklFtuOzW7TqJdXB39oOgzBLys92mpUwRcg"
 LANGFLOW_ENDPOINT = "https://agents.kolbplus.de/api/v1/run/30d8502d-e8af-4a48-a095-8c8e59c20d6e?stream=false"
-WEBHOOK_URL = "https://telegram-ai-bot-peh1.onrender.com/webhook"  # Замените на ваш HTTPS URL
+WEBHOOK_URL = "https://ваш-домен.ру/webhook"  # Обязательно HTTPS!
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.environ.get('PORT', 5000))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
-    user = update.effective_user
-    await update.message.reply_text(
-        f"Привет, {user.first_name}! Я тестовый бот с AI-моделью.\n"
-        "Просто напиши мне любой вопрос, и я постараюсь ответить!"
-    )
+    await update.message.reply_text("Привет! Я бот с AI-моделью. Задайте мне вопрос!")
 
 def extract_message(response_data: Dict[str, Any]) -> Optional[str]:
     """Извлекает текстовое сообщение из ответа API"""
     try:
         # Основной путь к сообщению
-        if 'outputs' in response_data and len(response_data['outputs']) > 0:
-            first_output = response_data['outputs'][0]
-            if 'outputs' in first_output and len(first_output['outputs']) > 0:
-                message_data = first_output['outputs'][0]
-                if 'results' in message_data and 'message' in message_data['results']:
-                    message = message_data['results']['message']
+        if outputs := response_data.get('outputs', []):
+            if outputs[0].get('outputs'):
+                if message := outputs[0]['outputs'][0].get('results', {}).get('message'):
                     if isinstance(message, str):
                         return message
-                    elif isinstance(message, dict):
-                        return message.get('text') or message.get('data', {}).get('text')
+                    return message.get('text') or message.get('data', {}).get('text')
         
-        # Альтернативные пути
-        paths_to_check = [
-            ['artifacts', 'message'],
-            ['messages', 0, 'message'],
-            ['text']
-        ]
-        
-        for path in paths_to_check:
+        # Альтернативные пути поиска текста
+        for path in [['artifacts', 'message'], ['messages', 0, 'message'], ['text']]:
             try:
                 result = response_data
                 for key in path:
@@ -62,25 +48,18 @@ def extract_message(response_data: Dict[str, Any]) -> Optional[str]:
 
         logger.warning(f"Неизвестный формат ответа: {response_data}")
         return None
-
     except Exception as e:
-        logger.error(f"Ошибка при разборе ответа API: {str(e)}")
+        logger.error(f"Ошибка парсинга: {str(e)}")
         return None
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений"""
     try:
-        user_message = update.message.text
-        logger.info(f"Получено сообщение от {update.effective_user.id}: {user_message}")
-        
         response = requests.post(
             LANGFLOW_ENDPOINT,
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": LANGFLOW_API_KEY
-            },
+            headers={"Content-Type": "application/json", "x-api-key": LANGFLOW_API_KEY},
             json={
-                "input_value": user_message,
+                "input_value": update.message.text,
                 "output_type": "chat",
                 "input_type": "chat"
             },
@@ -88,47 +67,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         if response.status_code == 200:
-            ai_message = extract_message(response.json())
-            await update.message.reply_text(ai_message or "Не удалось обработать ответ AI")
+            if message := extract_message(response.json()):
+                await update.message.reply_text(message)
+            else:
+                await update.message.reply_text("Не удалось обработать ответ AI")
         else:
-            logger.error(f"Ошибка API: {response.status_code} - {response.text}")
-            await update.message.reply_text("Ошибка при обработке запроса")
+            logger.error(f"API error: {response.status_code}")
+            await update.message.reply_text("Ошибка сервера, попробуйте позже")
 
     except Exception as e:
-        logger.error(f"Ошибка: {str(e)}")
-        await update.message.reply_text("Внутренняя ошибка сервера")
+        logger.error(f"Error: {str(e)}")
+        await update.message.reply_text("Внутренняя ошибка")
 
-async def post_init(application: Application):
-    """Функция инициализации после запуска"""
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    await application.bot.set_webhook(
+async def setup_webhook(app: Application):
+    """Настройка webhook при запуске"""
+    await app.bot.delete_webhook(drop_pending_updates=True)
+    await app.bot.set_webhook(
         url=WEBHOOK_URL,
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True
     )
-    logger.info(f"Webhook установлен на {WEBHOOK_URL}")
+    logger.info(f"Webhook настроен на {WEBHOOK_URL}")
 
 def main():
-    """Запуск бота в режиме webhook"""
+    """Запуск приложения"""
     try:
-        app = Application.builder() \
-            .token(TELEGRAM_TOKEN) \
-            .post_init(post_init) \
-            .build()
+        app = Application.builder().token(TELEGRAM_TOKEN).build()
         
         # Регистрация обработчиков
         app.add_handler(CommandHandler("start", start))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         
-        # Запуск webhook
+        # Настройка и запуск webhook
         app.run_webhook(
             listen=WEBAPP_HOST,
             port=WEBAPP_PORT,
             webhook_url=WEBHOOK_URL,
-            secret_token=None,  # Можно добавить для безопасности
+            secret_token=None,
+            setup_webhook=setup_webhook
         )
-        
-        logger.info("Бот запущен в режиме webhook")
 
     except Exception as e:
         logger.critical(f"Ошибка запуска: {str(e)}")
