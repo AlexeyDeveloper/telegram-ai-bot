@@ -3,6 +3,7 @@ import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import logging
+import asyncio
 
 # Настройка логирования
 logging.basicConfig(
@@ -21,22 +22,6 @@ PORT = int(os.getenv('PORT', 5000))
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я бот с AI-моделью. Задайте вопрос.")
 
-def extract_message(response_data: dict) -> str:
-    """Упрощенный парсер ответа API"""
-    try:
-        # Основной путь к сообщению
-        message = (response_data.get('outputs', [{}])[0]
-                  .get('outputs', [{}])[0]
-                  .get('results', {})
-                  .get('message', {}))
-        
-        if isinstance(message, str):
-            return message
-        return message.get('text', 'Не удалось обработать ответ')
-    except Exception as e:
-        logger.error(f"Ошибка парсинга: {e}")
-        return "Ошибка обработки ответа"
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         response = requests.post(
@@ -52,29 +37,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             },
             timeout=10
         )
-        await update.message.reply_text(extract_message(response.json()))
+        
+        if response.status_code == 200:
+            message = response.json().get('outputs', [{}])[0].get('outputs', [{}])[0].get('results', {}).get('message', '')
+            text = message if isinstance(message, str) else message.get('text', 'Не удалось обработать ответ')
+            await update.message.reply_text(text)
+        else:
+            await update.message.reply_text("Ошибка API, попробуйте позже")
+            
     except Exception as e:
         logger.error(f"Ошибка: {e}")
-        await update.message.reply_text("Произошла ошибка, попробуйте позже")
+        await update.message.reply_text("Произошла ошибка")
 
-def main():
+async def setup_webhook(app: Application):
+    await app.bot.delete_webhook(drop_pending_updates=True)
+    await app.bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True
+    )
+    logger.info(f"Webhook установлен на {WEBHOOK_URL}")
+
+async def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Удаляем старый webhook перед запуском
-    app.bot.delete_webhook(drop_pending_updates=True)
-    
-    # Регистрируем обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Устанавливаем новый webhook
-    app.bot.set_webhook(
-        url=WEBHOOK_URL,
-        drop_pending_updates=True
-    )
+    await setup_webhook(app)
     
-    # Запускаем приложение (для Render)
-    app.run_webhook(
+    await app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         webhook_url=WEBHOOK_URL,
@@ -82,4 +74,4 @@ def main():
     )
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
