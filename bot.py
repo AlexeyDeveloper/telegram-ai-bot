@@ -17,8 +17,8 @@ TELEGRAM_TOKEN = "7547401041:AAFa6kFA-nT8PpAuDwjqFAzIOYzrxmPXxgY"
 LANGFLOW_API_KEY = "sk-ric-EXqYeklFtuOzW7TqJdXB39oOgzBLys92mpUwRcg"
 LANGFLOW_ENDPOINT = "https://agents.kolbplus.de/api/v1/run/30d8502d-e8af-4a48-a095-8c8e59c20d6e?stream=false"
 WEBHOOK_URL = "https://telegram-ai-bot-peh1.onrender.com/webhook"  # Замените на ваш HTTPS URL
-WEBAPP_HOST = "0.0.0.0"  # Для Docker/Render оставьте 0.0.0.0
-WEBAPP_PORT = int(os.environ.get('PORT', 5000))  # Порт для Render/Heroku
+WEBAPP_HOST = "0.0.0.0"
+WEBAPP_PORT = int(os.environ.get('PORT', 5000))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
@@ -98,10 +98,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка: {str(e)}")
         await update.message.reply_text("Внутренняя ошибка сервера")
 
-async def setup_webhook(app: Application):
-    """Настройка webhook при запуске"""
-    await app.bot.delete_webhook(drop_pending_updates=True)
-    await app.bot.set_webhook(
+async def post_init(application: Application):
+    """Функция инициализации после запуска"""
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    await application.bot.set_webhook(
         url=WEBHOOK_URL,
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True
@@ -111,18 +111,21 @@ async def setup_webhook(app: Application):
 def main():
     """Запуск бота в режиме webhook"""
     try:
-        app = Application.builder().token(TELEGRAM_TOKEN).build()
+        app = Application.builder() \
+            .token(TELEGRAM_TOKEN) \
+            .post_init(post_init) \
+            .build()
         
         # Регистрация обработчиков
         app.add_handler(CommandHandler("start", start))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         
-        # Настройка webhook при запуске
+        # Запуск webhook
         app.run_webhook(
             listen=WEBAPP_HOST,
             port=WEBAPP_PORT,
             webhook_url=WEBHOOK_URL,
-            setup_webhook=setup_webhook
+            secret_token=None,  # Можно добавить для безопасности
         )
         
         logger.info("Бот запущен в режиме webhook")
