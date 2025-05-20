@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # Конфигурация
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 LANGFLOW_API_KEY = os.getenv('LANGFLOW_API_KEY')
-LANGFLOW_ENDPOINT = os.getenv('TELEGRAM_TOKEN')
+LANGFLOW_ENDPOINT = os.getenv('LANGFLOW_ENDPOINT')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
