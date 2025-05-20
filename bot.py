@@ -3,7 +3,6 @@ import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import logging
-import asyncio
 
 # Настройка логирования
 logging.basicConfig(
@@ -13,17 +12,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '7547401041:AAFa6kFA-nT8PpAuDwjqFAzIOYzrxmPXxgY')
-LANGFLOW_API_KEY = os.getenv('LANGFLOW_API_KEY', 'sk-ric-EXqYeklFtuOzW7TqJdXB39oOgzBLys92mpUwRcg')
-LANGFLOW_ENDPOINT = "https://agents.kolbplus.de/api/v1/run/30d8502d-e8af-4a48-a095-8c8e59c20d6e?stream=false"
-WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://telegram-ai-bot-peh1.onrender.com/webhook')
-PORT = int(os.getenv('PORT', 10000))
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+LANGFLOW_API_KEY = os.getenv('LANGFLOW_API_KEY')
+LANGFLOW_ENDPOINT = os.getenv('TELEGRAM_TOKEN')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я бот с AI-моделью. Задайте вопрос.")
+    """Обработчик команды /start"""
+    user = update.effective_user
+    await update.message.reply_text(
+        f"Привет, {user.first_name}! Я тестовый бот с AI-моделью.\n"
+        "Просто напиши мне любой вопрос, и я постараюсь ответить!"
+    )
+
+def extract_message_from_response(response_data):
+    """Извлекает текстовое сообщение из сложного JSON-ответа"""
+    try:
+        # Основной путь к сообщению в вашем JSON
+        message = response_data['outputs'][0]['outputs'][0]['results']['message']['text']
+        return message
+    except (KeyError, IndexError, TypeError) as e:
+        logger.error(f"Ошибка при разборе ответа API: {str(e)}")
+        return None
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик текстовых сообщений"""
     try:
+        user_message = update.message.text
+        logger.info(f"Получено сообщение от {update.effective_user.id}: {user_message}")
+        
+        # Отправка запроса к AI-модели
         response = requests.post(
             LANGFLOW_ENDPOINT,
             headers={
@@ -31,7 +48,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "x-api-key": LANGFLOW_API_KEY
             },
             json={
-                "input_value": update.message.text,
+                "input_value": user_message,
                 "output_type": "chat",
                 "input_type": "chat"
             },
@@ -39,33 +56,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         if response.status_code == 200:
-            data = response.json()
-            message = data.get('outputs', [{}])[0].get('outputs', [{}])[0].get('results', {}).get('message', '')
-            text = message if isinstance(message, str) else message.get('text', 'Не удалось обработать ответ')
-            await update.message.reply_text(text)
+            response_data = response.json()
+            ai_message = extract_message_from_response(response_data)
+            
+            if ai_message:
+                await update.message.reply_text(ai_message)
+            else:
+                logger.error("Не удалось извлечь сообщение из ответа API")
+                await update.message.reply_text("Получен неожиданный формат ответа от AI.")
         else:
-            await update.message.reply_text("Ошибка API, попробуйте позже")
+            error_msg = f"Ошибка API (код {response.status_code}): {response.text}"
+            logger.error(error_msg)
+            await update.message.reply_text("Произошла ошибка при обработке запроса. Попробуйте позже.")
             
     except Exception as e:
-        logger.error(f"Ошибка: {e}")
-        await update.message.reply_text("Произошла ошибка")
+        logger.error(f"Ошибка в handle_message: {str(e)}")
+        await update.message.reply_text("Упс! Что-то пошло не так. Попробуйте еще раз.")
 
 def main():
-    """Основная функция для запуска на Render"""
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Удаляем старый webhook и устанавливаем новый
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=WEBHOOK_URL,
-        drop_pending_updates=True,
-        secret_token=None
-    )
+    """Запуск бота"""
+    try:
+        logger.info("Запуск бота...")
+        app = Application.builder().token(TELEGRAM_TOKEN).build()
+        
+        # Регистрируем обработчики
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        
+        # Запускаем бота в режиме polling
+        logger.info("Бот запущен в режиме polling")
+        app.run_polling()
+        
+    except Exception as e:
+        logger.critical(f"Ошибка при запуске бота: {str(e)}")
 
 if __name__ == "__main__":
-    # Для Render используем просто main() без asyncio.run
     main()
